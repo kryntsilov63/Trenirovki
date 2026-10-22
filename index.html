@@ -188,10 +188,9 @@ summary .muted{font-weight:500;font-size:14px}
 <script>
 const KEY = 'gym:v1';
 const GROUPS = [
-  {name:'Грудь',c:'red'},{name:'Спина',c:'blue'},{name:'Ноги',c:'yellow'},{name:'Квадрицепс',c:'yellow'},{name:'Голени',c:'yellow'},
+  {name:'Грудь',c:'red'},{name:'Спина',c:'blue'},{name:'Ноги',c:'yellow'},
   {name:'Бицепс',c:'green'},{name:'Брахиалис',c:'green'},{name:'Трицепс',c:'green'},
-  {name:'Дельты (средний пучок)',c:'steel'},{name:'Дельты (задний пучок)',c:'steel'},{name:'Дельты (передний пучок)',c:'steel'},
-  {name:'Пресс',c:'steel'},{name:'Поясница',c:'steel'}
+  {name:'Дельты',c:'steel'},{name:'Пресс',c:'steel'},{name:'Поясница',c:'steel'}
 ];
 // [группа, название, вес, повторы, тип]
 const DEF = [
@@ -320,10 +319,34 @@ function save(){
   try{ localStorage.setItem(KEY, JSON.stringify(data)); if(!storageOk){ storageOk=true; render(); } }
   catch(e){ if(storageOk){ storageOk=false; render(); } }
 }
+function migrate(){
+  if((data.v||1) < 2){
+    const del=['e3','e7','e9','e10','e11','e18','e23'];
+    const ren={e12:['Разгибания (квадрицепс)','Ноги'], e13:['Подъем на икры','Ноги'],
+      e19:['Махи гантелями в стороны (средний пучок)','Дельты'], e20:['Отведение бабочки стоя (задний пучок)','Дельты'],
+      e21:['Подъем сведенных гантелей (передний пучок)','Дельты']};
+    data.exercises.forEach(ex=>{
+      if(del.includes(ex.id)) ex.deleted=true;
+      if(ren[ex.id]){ ex.name=ren[ex.id][0]; ex.group=ren[ex.id][1]; }
+    });
+    (data.templates||[]).forEach(t=>{ t.exIds=t.exIds.filter(id=>!del.includes(id)); });
+    if(data.active) data.active.items=data.active.items.filter(it=>!del.includes(it.exId));
+    data.v=2;
+  }
+  // упражнения из старых групп, которых больше нет
+  const map={'Квадрицепс':'Ноги','Голени':'Ноги'};
+  data.exercises.forEach(ex=>{
+    if(map[ex.group]) ex.group=map[ex.group];
+    else if(ex.group.startsWith('Дельты')) ex.group='Дельты';
+    else if(!GROUPS.some(g=>g.name===ex.group)) ex.group='Пресс';
+  });
+  save();
+}
 async function load(){
   try{ const v=localStorage.getItem(KEY); data = v ? JSON.parse(v) : null; }catch(e){ data=null; storageOk=false; }
   try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
   if(!data || !data.exercises) data=defaults();
+  migrate();
   if(!Array.isArray(data.templates)) data.templates=[];
   render();
 }
@@ -622,7 +645,7 @@ document.addEventListener('click',e=>{
       data.templates.forEach(t=>{ t.exIds=t.exIds.filter(x=>x!==ex.id); });
       if(data.active) data.active.items=data.active.items.filter(it=>it.exId!==ex.id);
       progEx=null; exEdit=false; save(); render(); window.scrollTo(0,0); toast('Упражнение удалено'); break; }
-    case 'reset': if(!armed(b,'Точно стереть? Нажми ещё раз')) break; data=defaults(); progEx=null; rest=null; sheet=false; save(); render(); toast('Данные стёрты'); break;
+    case 'reset': if(!armed(b,'Точно стереть? Нажми ещё раз')) break; data=defaults(); migrate(); progEx=null; rest=null; sheet=false; save(); render(); toast('Данные стёрты'); break;
     case 'bm': bodyMetric=b.dataset.k; render(); break;
     case 'addBody': {
       const en={id:uid(), ts:Date.now(), date:document.getElementById('b-date').value||today()}; let any=false;
@@ -676,7 +699,7 @@ document.addEventListener('change', e=>{
       const d=JSON.parse(rd.result);
       if(!d || !Array.isArray(d.exercises) || !Array.isArray(d.sessions)) throw new Error('bad');
       if(!Array.isArray(d.body)) d.body=[];
-      d.active=null; data=d; progEx=null; save(); render();
+      d.active=null; data=d; migrate(); progEx=null; render();
       toast('Данные восстановлены: '+d.sessions.length+' '+plural(d.sessions.length,'тренировка','тренировки','тренировок'));
     }catch(err){ toast('Это не файл копии тренировок'); }
   };
