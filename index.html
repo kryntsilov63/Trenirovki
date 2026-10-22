@@ -236,7 +236,7 @@ function defaults(){
   };
 }
 
-let tplDraft = null;
+let tplDraft = null, exEdit = false;
 let data = null, tab = 'workout', progEx = null, bodyMetric = 'weight', rest = null, sheet = false, storageOk = true;
 const $app = document.getElementById('app');
 
@@ -440,7 +440,7 @@ function renderSheet(){
   let h=`<div class="overlay" data-act="closeSheet"><div class="panel" role="dialog" aria-label="Добавить упражнение">
     <div class="panel-h"><strong>Добавить упражнение</strong><button class="pill" data-act="closeSheet">Готово</button></div><div class="panel-b">`;
   GROUPS.forEach(g=>{
-    const exs=data.exercises.filter(e=>e.group===g.name); if(!exs.length) return;
+    const exs=data.exercises.filter(e=>e.group===g.name && !e.deleted); if(!exs.length) return;
     h+=`<div class="grp"><span class="plate" style="--c:var(--${g.c})"></span>${esc(g.name)}</div>`;
     exs.forEach(ex=>{
       const L=lastFor(ex.id), added=inS.has(ex.id);
@@ -462,7 +462,7 @@ function renderProgress(){
   if(progEx){ const ex=exById(progEx); if(ex) return renderExDetail(ex); progEx=null; }
   let h='<div class="top"><h1>Прогресс</h1><div class="sub">Рабочий вес по каждому упражнению. Нажми, чтобы увидеть график.</div></div>';
   GROUPS.forEach(g=>{
-    const exs=data.exercises.filter(e=>e.group===g.name); if(!exs.length) return;
+    const exs=data.exercises.filter(e=>e.group===g.name && !e.deleted); if(!exs.length) return;
     h+=`<div class="grp"><span class="plate" style="--c:var(--${g.c})"></span>${esc(g.name)}</div><div class="list">`;
     exs.forEach(ex=>{
       const p=exPoints(ex), cur=p[p.length-1];
@@ -481,8 +481,14 @@ function renderProgress(){
 }
 function renderExDetail(ex){
   const p=exPoints(ex), u=unitOf(ex), color=`var(--${gc(ex.group)})`;
-  let h=`<button class="back" data-act="back">‹ Все упражнения</button>
+  let h=`<div style="display:flex;justify-content:space-between;align-items:center"><button class="back" data-act="back">‹ Все упражнения</button>${exEdit?'':'<button class="link" data-act="exEdit">Изменить</button>'}</div>
     <div class="top" style="margin-top:4px"><h1>${esc(ex.name)}</h1><div class="sub">${ex.type==='bw'?'Сумма повторений за тренировку':'Максимальный рабочий вес за тренировку'}</div></div>`;
+  if(exEdit) h+=`<div class="form" style="margin-bottom:16px">
+    <div class="field full"><label for="ex-name">Название</label><input id="ex-name" value="${esc(ex.name)}"></div>
+    <div class="field full"><label for="ex-group">Группа мышц</label><select id="ex-group">${GROUPS.map(g=>`<option ${g.name===ex.group?'selected':''}>${esc(g.name)}</option>`).join('')}</select></div>
+    <button class="btn sec" data-act="exEditCancel">Отмена</button><button class="btn" data-act="exSave">Сохранить</button>
+    <button class="link danger full" data-act="exDel">Удалить упражнение</button>
+    <p class="full small muted">При удалении упражнение пропадёт из списков и шаблонов.</p></div>`;
   h+=chart(p,color);
   if(p.length){
     const first=p[0], cur=p[p.length-1], best=Math.max(...p.map(x=>x.v));
@@ -504,7 +510,7 @@ function renderTplEditor(){
     <div class="form"><div class="field full"><label for="tpl-name">Название</label><input id="tpl-name" data-f="tplname" value="${esc(d.name)}" placeholder="Например, Грудь и спина"></div></div>
     <p class="sub" style="margin-top:12px">Отметь упражнения в том порядке, в котором будешь их делать. Выбрано: ${d.exIds.length}</p>`;
   GROUPS.forEach(g=>{
-    const exs=data.exercises.filter(e=>e.group===g.name); if(!exs.length) return;
+    const exs=data.exercises.filter(e=>e.group===g.name && !e.deleted); if(!exs.length) return;
     h+=`<div class="grp"><span class="plate" style="--c:var(--${g.c})"></span>${esc(g.name)}</div>`;
     exs.forEach(ex=>{
       const k=d.exIds.indexOf(ex.id);
@@ -605,8 +611,17 @@ document.addEventListener('click',e=>{
     }
     case 'discard': if(!armed(b,'Нажми ещё раз, чтобы удалить')) break; data.active=null; rest=null; sheet=false; save(); render(); break;
     case 'delSession': if(!armed(b,'Нажми ещё раз для удаления')) break; data.sessions=data.sessions.filter(x=>x.id!==id); save(); render(); break;
-    case 'openEx': progEx=id; render(); window.scrollTo(0,0); break;
-    case 'back': progEx=null; render(); break;
+    case 'openEx': progEx=id; exEdit=false; render(); window.scrollTo(0,0); break;
+    case 'back': progEx=null; exEdit=false; render(); break;
+    case 'exEdit': exEdit=true; render(); break;
+    case 'exEditCancel': exEdit=false; render(); break;
+    case 'exSave': { const ex=exById(progEx), name=document.getElementById('ex-name').value.trim();
+      if(!name){ toast('Введи название'); break; }
+      ex.name=name; ex.group=document.getElementById('ex-group').value; exEdit=false; save(); render(); toast('Сохранено'); break; }
+    case 'exDel': { if(!armed(b,'Нажми ещё раз, чтобы удалить')) break; const ex=exById(progEx); ex.deleted=true;
+      data.templates.forEach(t=>{ t.exIds=t.exIds.filter(x=>x!==ex.id); });
+      if(data.active) data.active.items=data.active.items.filter(it=>it.exId!==ex.id);
+      progEx=null; exEdit=false; save(); render(); window.scrollTo(0,0); toast('Упражнение удалено'); break; }
     case 'reset': if(!armed(b,'Точно стереть? Нажми ещё раз')) break; data=defaults(); progEx=null; rest=null; sheet=false; save(); render(); toast('Данные стёрты'); break;
     case 'bm': bodyMetric=b.dataset.k; render(); break;
     case 'addBody': {
