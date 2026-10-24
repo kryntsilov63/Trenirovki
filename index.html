@@ -29,9 +29,11 @@
   }
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{background:var(--bg);color:var(--ink)}
-body{font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;padding-bottom:calc(96px + env(safe-area-inset-bottom))}
-body.resting{padding-bottom:calc(170px + env(safe-area-inset-bottom))}
+html,body{background:var(--bg);color:var(--ink);height:100%;overflow:hidden;overscroll-behavior:none}
+body{font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;
+  position:fixed;inset:0;display:flex;flex-direction:column}
+#scroller{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}
+#rest{flex:none;background:var(--bg)}
 .num{font-family:ui-rounded,"SF Pro Rounded",-apple-system,sans-serif;font-variant-numeric:tabular-nums}
 main{max-width:560px;margin:0 auto;padding:calc(16px + env(safe-area-inset-top)) 16px 24px}
 .backup{background:var(--surface);border-radius:20px;padding:14px;margin-top:10px}
@@ -81,14 +83,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
 .x{appearance:none;background:none;border:0;color:var(--muted);font-size:22px;line-height:1;width:26px;height:40px;cursor:pointer}
 
 /* tabs */
-.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;justify-content:center;gap:4px;
+.tabs{flex:none;position:relative;z-index:20;display:flex;justify-content:center;gap:4px;
   padding:8px 10px calc(8px + env(safe-area-inset-bottom));
-  background:color-mix(in srgb, var(--bg) 82%, transparent);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid var(--line)}
+  background:var(--bg);border-top:1px solid var(--line)}
 .tabs button{flex:1;max-width:180px;background:none;border:0;font:inherit;font-size:15px;font-weight:600;color:var(--muted);padding:11px 4px;border-radius:12px;cursor:pointer}
 .tabs button[aria-current="page"]{color:var(--ink);background:var(--surface)}
 
 /* rest timer */
-.rest{position:fixed;left:12px;right:12px;bottom:calc(72px + env(safe-area-inset-bottom));max-width:536px;margin:0 auto;z-index:19;
+.rest{max-width:536px;margin:8px auto;width:calc(100% - 24px);
   background:var(--ink);color:var(--bg);border-radius:18px;padding:10px 10px 10px 16px;display:flex;align-items:center;gap:12px}
 .rest .tw{min-width:84px}
 .rest .t{font-size:28px;font-weight:800;line-height:1.05;display:block}
@@ -101,6 +103,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
 .rest .seg button[aria-pressed="true"]{background:rgba(255,255,255,.9);color:#15181D}
 .restpick{display:flex;align-items:center;gap:10px;margin:-6px 0 16px;font-size:15px;color:var(--muted)}
 .restpick .seg{background:var(--surface2);color:var(--ink)}
+.iostimer{background:var(--surface);border-radius:16px;padding:12px 14px;margin:-4px 0 16px}
+.iostimer label{display:flex;align-items:center;gap:12px;font-weight:600;cursor:pointer}
+.iostimer .sw{appearance:none;-webkit-appearance:none;width:51px;height:31px;border-radius:999px;background:var(--surface2);position:relative;flex:none;cursor:pointer;margin-left:auto;transition:background .15s}
+.iostimer .sw::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .15s}
+.iostimer .sw:checked{background:var(--good)}
+.iostimer .sw:checked::after{transform:translateX(20px)}
+.iostimer p{font-size:13px;color:var(--muted);margin-top:6px}
 
 /* sheet */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:30;display:flex;align-items:flex-end;justify-content:center}
@@ -169,13 +178,13 @@ summary .muted{font-weight:500;font-size:14px}
 .dots .plate{width:12px;height:12px;margin:0;background:radial-gradient(circle, transparent 0 2px, var(--c) 2.5px)}
 .pick.on{box-shadow:inset 0 0 0 2px var(--ink)}
 .ord{min-width:28px;height:28px;border-radius:50%;background:var(--ink);color:var(--bg);font-weight:800;display:inline-flex;align-items:center;justify-content:center;font-size:14px}
-.savebar{position:sticky;bottom:calc(84px + env(safe-area-inset-bottom));padding-top:10px}
+.savebar{position:sticky;bottom:0;padding:10px 0 12px;background:linear-gradient(transparent, var(--bg) 30%)}
 .loading{padding:60px 0;text-align:center;color:var(--muted)}
 @media (prefers-reduced-motion: reduce){.toast{transition:none}}
 </style>
 </head>
 <body>
-<main id="app"><div class="loading">Загружаю дневник…</div></main>
+<div id="scroller"><main id="app"><div class="loading">Загружаю дневник…</div></main></div>
 <div id="rest"></div>
 <div id="sheet"></div>
 <nav class="tabs" aria-label="Разделы">
@@ -347,6 +356,7 @@ async function load(){
   try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
   if(!data || !data.exercises) data=defaults();
   migrate();
+  if(data.active && data.restAt && Date.now()-data.restAt < 15*60e3) rest=data.restAt;
   if(!Array.isArray(data.templates)) data.templates=[];
   render();
 }
@@ -406,7 +416,9 @@ function renderWorkout(){
   const a=data.active; let h='';
   if(a){
     h+=`<div class="top"><h1>${esc(a.name||'Тренировка')}</h1><div class="sub">Дата: <input type="date" class="dateinp" data-f="adate" value="${a.date}" aria-label="Дата тренировки"></div></div>
-      <div class="restpick">Отдых между подходами ${restSeg()}</div>`;
+      <div class="restpick">Отдых между подходами ${restSeg()}</div>
+      <div class="iostimer"><label for="ios-t">Запускать таймер iPhone<input type="checkbox" class="sw" id="ios-t" data-f="iostimer" ${data.iosTimer?'checked':''}></label>
+      <p>${data.iosTimer?`После ✓ запустится команда «Отдых ${restMin()}». Вернуться в приложение — стрелка ◀ в левом верхнем углу.`:'Таймер сработает, даже если экран заблокирован. Нужны команды «Отдых 4» и «Отдых 5» в приложении «Команды».'}</p></div>`;
     if(!a.items.length) h+='<p class="empty">Добавь первое упражнение — вес подставится из прошлого раза.</p>';
     else h+='<p class="sub" style="margin:-8px 0 14px">Серые цифры — повторения прошлого раза. Нажми ✓, и они подставятся, если не вводил свои.</p>';
     a.items.forEach((it,ii)=>{ h+=itemCard(it,ii); });
@@ -573,7 +585,6 @@ function renderBody(){
 /* ---------- rest timer ---------- */
 function renderRest(){
   const el=document.getElementById('rest');
-  document.body.classList.toggle('resting', !!rest);
   if(!rest){ el.innerHTML=''; return; }
   const sec=Math.floor((Date.now()-rest)/1000), target=restMin()*60, left=target-sec;
   const ready=left<=0, v=Math.abs(left);
@@ -585,6 +596,7 @@ function restSeg(){ return `<span class="seg" role="group" aria-label="Врем�
 setInterval(()=>{ if(rest) renderRest(); },1000);
 
 /* ---------- render ---------- */
+function toTop(){ const sc=document.getElementById('scroller'); if(sc) sc.scrollTop=0; }
 function render(){
   if(!data) return;
   let h = storageOk ? '' : '<div class="warnbar">Не удаётся сохранить данные на телефоне. Проверь, что Safari не в режиме «Частный доступ».</div>';
@@ -597,13 +609,13 @@ function render(){
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
   const tb=e.target.closest('[data-tab]');
-  if(tb){ tab=tb.dataset.tab; if(tab!=='progress') progEx=null; render(); window.scrollTo(0,0); return; }
+  if(tb){ tab=tb.dataset.tab; if(tab!=='progress') progEx=null; render(); toTop(); return; }
   const b=e.target.closest('[data-act]'); if(!b || !data) return;
   const act=b.dataset.act, i=+b.dataset.i, s=+b.dataset.s, id=b.dataset.id;
   const A=data.active;
   switch(act){
     case 'start': data.active={date:today(), items:[]}; sheet=true; save(); render(); break;
-    case 'repeat': { const last=sortedDesc()[0]; data.active={date:today(), tplId:last.tplId||null, name:last.name||null, items:last.items.filter(it=>exById(it.exId)).map(it=>newItem(it.exId))}; save(); render(); window.scrollTo(0,0); break; }
+    case 'repeat': { const last=sortedDesc()[0]; data.active={date:today(), tplId:last.tplId||null, name:last.name||null, items:last.items.filter(it=>exById(it.exId)).map(it=>newItem(it.exId))}; save(); render(); toTop(); break; }
     case 'openSheet': sheet=true; renderSheet(); break;
     case 'closeSheet': if(b.classList.contains('overlay') && e.target!==b) return; sheet=false; renderSheet(); break;
     case 'pick': if(A && !A.items.some(x=>x.exId===id)){ A.items.push(newItem(id)); save(); render(); } break;
@@ -620,21 +632,22 @@ document.addEventListener('click',e=>{
       const st=A.items[i].sets[s], row=b.closest('.set');
       if(!st.done){
         if(st.r===''||st.r==null){ const inp=row.querySelector('[data-f="r"]'); if(inp && inp.placeholder){ st.r=inp.placeholder; inp.value=st.r; } }
-        st.done=true; rest=Date.now();
+        st.done=true; rest=Date.now(); data.restAt=rest;
+        if(data.iosTimer){ save(); setTimeout(()=>{ location.href='shortcuts://run-shortcut?name='+encodeURIComponent('Отдых '+restMin()); },150); }
       } else st.done=false;
       row.classList.toggle('done', st.done); save(); renderRest(); break;
     }
-    case 'stopRest': rest=null; renderRest(); break;
-    case 'restMin': data.restMin=+b.dataset.m; save(); document.querySelectorAll('[data-act="restMin"]').forEach(x=>x.setAttribute('aria-pressed', String(+x.dataset.m===data.restMin))); renderRest(); break;
+    case 'stopRest': rest=null; data.restAt=null; save(); renderRest(); break;
+    case 'restMin': data.restMin=+b.dataset.m; save(); if(tab==='workout' && data.active) render(); document.querySelectorAll('[data-act="restMin"]').forEach(x=>x.setAttribute('aria-pressed', String(+x.dataset.m===data.restMin))); renderRest(); break;
     case 'finish': {
       const items=A.items.map(it=>({exId:it.exId, sets:it.sets.map(x=>({w:num(x.w), r:num(x.r)})).filter(x=>x.r!=null && x.r>0)})).filter(it=>it.sets.length);
       if(!items.length){ toast('Заполни повторения хотя бы в одном подходе'); break; }
       data.sessions.push({id:uid(), date:A.date||today(), ts:Date.now(), tplId:A.tplId||null, name:A.name||null, items});
-      data.active=null; rest=null; sheet=false; save(); render(); window.scrollTo(0,0); toast('Тренировка сохранена'); break;
+      data.active=null; rest=null; sheet=false; save(); render(); toTop(); toast('Тренировка сохранена'); break;
     }
     case 'discard': if(!armed(b,'Нажми ещё раз, чтобы удалить')) break; data.active=null; rest=null; sheet=false; save(); render(); break;
     case 'delSession': if(!armed(b,'Нажми ещё раз для удаления')) break; data.sessions=data.sessions.filter(x=>x.id!==id); save(); render(); break;
-    case 'openEx': progEx=id; exEdit=false; render(); window.scrollTo(0,0); break;
+    case 'openEx': progEx=id; exEdit=false; render(); toTop(); break;
     case 'back': progEx=null; exEdit=false; render(); break;
     case 'exEdit': exEdit=true; render(); break;
     case 'exEditCancel': exEdit=false; render(); break;
@@ -644,7 +657,7 @@ document.addEventListener('click',e=>{
     case 'exDel': { if(!armed(b,'Нажми ещё раз, чтобы удалить')) break; const ex=exById(progEx); ex.deleted=true;
       data.templates.forEach(t=>{ t.exIds=t.exIds.filter(x=>x!==ex.id); });
       if(data.active) data.active.items=data.active.items.filter(it=>it.exId!==ex.id);
-      progEx=null; exEdit=false; save(); render(); window.scrollTo(0,0); toast('Упражнение удалено'); break; }
+      progEx=null; exEdit=false; save(); render(); toTop(); toast('Упражнение удалено'); break; }
     case 'reset': if(!armed(b,'Точно стереть? Нажми ещё раз')) break; data=defaults(); migrate(); progEx=null; rest=null; sheet=false; save(); render(); toast('Данные стёрты'); break;
     case 'bm': bodyMetric=b.dataset.k; render(); break;
     case 'addBody': {
@@ -653,8 +666,8 @@ document.addEventListener('click',e=>{
       if(!any){ toast('Введи хотя бы одно значение'); break; }
       data.body.push(en); save(); render(); toast('Замер сохранён'); break;
     }
-    case 'newTpl': tplDraft={id:'t'+uid(), name:'', exIds:[]}; render(); window.scrollTo(0,0); break;
-    case 'editTpl': { const t=data.templates.find(x=>x.id===id); if(t){ tplDraft={id:t.id, name:t.name, exIds:[...t.exIds]}; render(); window.scrollTo(0,0); } break; }
+    case 'newTpl': tplDraft={id:'t'+uid(), name:'', exIds:[]}; render(); toTop(); break;
+    case 'editTpl': { const t=data.templates.find(x=>x.id===id); if(t){ tplDraft={id:t.id, name:t.name, exIds:[...t.exIds]}; render(); toTop(); } break; }
     case 'cancelTpl': tplDraft=null; render(); break;
     case 'tplToggle': { const k=tplDraft.exIds.indexOf(id); if(k>=0) tplDraft.exIds.splice(k,1); else tplDraft.exIds.push(id); render(); break; }
     case 'saveTpl': {
@@ -663,11 +676,11 @@ document.addEventListener('click',e=>{
       const t={id:tplDraft.id, name, exIds:[...tplDraft.exIds]};
       const k=data.templates.findIndex(x=>x.id===t.id);
       if(k>=0) data.templates[k]=t; else data.templates.push(t);
-      tplDraft=null; save(); render(); window.scrollTo(0,0); toast('Тренировка сохранена'); break;
+      tplDraft=null; save(); render(); toTop(); toast('Тренировка сохранена'); break;
     }
     case 'delTpl': if(!armed(b,'Нажми ещё раз для удаления')) break; data.templates=data.templates.filter(x=>x.id!==tplDraft.id); tplDraft=null; save(); render(); break;
     case 'startTpl': { const t=data.templates.find(x=>x.id===id); if(!t) break;
-      data.active={date:today(), tplId:t.id, name:t.name, items:t.exIds.filter(exById).map(newItem)}; save(); render(); window.scrollTo(0,0); break; }
+      data.active={date:today(), tplId:t.id, name:t.name, items:t.exIds.filter(exById).map(newItem)}; save(); render(); toTop(); break; }
     case 'exportData': exportData(); break;
     case 'importData': document.getElementById('importFile').click(); break;
     case 'delBody': if(!armed(b,'Нажми ещё раз для удаления')) break; data.body=data.body.filter(x=>x.id!==id); save(); render(); break;
@@ -675,6 +688,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('input',e=>{
   const t=e.target, f=t.dataset.f; if(!f || !data) return;
+  if(f==='iostimer'){ data.iosTimer=t.checked; save(); render(); return; }
   if(f==='tplname'){ if(tplDraft) tplDraft.name=t.value; return; }
   if(!data.active) return;
   if(f==='w'||f==='r'){ const st=data.active.items[+t.dataset.i].sets[+t.dataset.s]; st[f]=t.value; save(); }
