@@ -48,11 +48,16 @@ h2{font-size:20px;font-weight:700;letter-spacing:-.01em;margin:30px 0 10px}
 
 /* week */
 .week{background:var(--surface);border-radius:24px;padding:20px;display:flex;align-items:center;gap:18px;margin-bottom:14px}
-.plates{display:flex;gap:6px;flex:none}
-.bigplate{width:62px;height:62px;border-radius:50%;
-  background:radial-gradient(circle, var(--surface) 0 8px, var(--ink) 8.5px 11px, var(--blue) 11.5px 25px, rgba(0,0,0,.18) 25.5px 26.5px, var(--blue) 27px);}
-.bigplate.off{background:radial-gradient(circle, var(--surface) 0 8px, var(--line) 8.5px 11px, transparent 11.5px);border:2.5px dashed var(--line)}
-.weekn{font-size:34px;font-weight:800;line-height:1;letter-spacing:-.02em}
+.plates{display:grid;grid-template-columns:repeat(3,44px);gap:8px 10px;flex:none}
+.day{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--muted);line-height:1}
+.day.today{color:var(--ink);font-weight:700}
+.bigplate{width:44px;height:44px;border-radius:50%;
+  background:radial-gradient(circle, var(--surface) 0 5.5px, var(--ink) 6px 8px, var(--blue) 8.5px 17.5px, rgba(0,0,0,.2) 18px 18.8px, var(--blue) 19.3px);}
+.bigplate.off{background:radial-gradient(circle, var(--surface) 0 5.5px, var(--line) 6px 8px, var(--surface2) 8.5px 17.5px, var(--line) 18px 18.8px, var(--surface2) 19.3px)}
+.day.today .bigplate.off{box-shadow:0 0 0 2px var(--surface), 0 0 0 3.5px var(--muted)}
+.weekinfo{flex:1;min-width:0;text-align:center}
+.weekinfo .ln{display:block}
+.weekn{font-size:48px;font-weight:800;line-height:1;letter-spacing:-.02em}
 
 /* buttons */
 .btn{appearance:none;border:0;border-radius:14px;padding:15px 18px;font:inherit;font-weight:650;background:var(--btn);color:var(--btn-ink);width:100%;cursor:pointer;display:block}
@@ -429,12 +434,15 @@ function renderWorkout(){
   }
   if(tplDraft) return renderTplEditor();
   const mon=mondayStr(), td=today();
-  const cnt=data.sessions.filter(s=>s.date>=mon && s.date<=td).length;
+  const [my,mm,md]=mon.split('-').map(Number);
+  const days=[...Array(7)].map((_,k)=>dstr(new Date(my,mm-1,md+k)));
+  const cnt=data.sessions.filter(s=>s.date>=days[0] && s.date<=days[6]).length;
   const all=sortedDesc(), last=all[0];
-  let plates=''; for(let k=0;k<Math.max(2,cnt);k++) plates+=`<span class="bigplate ${k<cnt?'':'off'}"></span>`;
-  h+=`<div class="top"><h1>Тренировки</h1><div class="sub">4 подхода по 8–12 повторений, отдых 3–6 минут</div></div>
+  const DN=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  const plates=days.map((d,k)=>`<span class="day ${d===td?'today':''}"><span class="bigplate ${data.sessions.some(s=>s.date===d)?'':'off'}"></span>${DN[k]}</span>`).join('');
+  h+=`<div class="top"><h1>Тренировки</h1><div class="sub">4 подхода по 8–12 повторений, отдых 4–5 минут</div></div>
     <div class="week"><div class="plates" aria-hidden="true">${plates}</div>
-    <div><div class="weekn num">${cnt} из 2</div><div class="muted small" style="margin-top:6px">${cnt>=2?'План на неделю выполнен':'тренировок на этой неделе'}${last?'<br>Последняя: '+fdate(last.date)+', '+agoText(daysAgo(last.date)):''}</div></div></div>
+    <div class="weekinfo"><div class="weekn num">${cnt}</div><div class="muted small" style="margin-top:6px"><span class="ln">${plural(cnt,'тренировка','тренировки','тренировок')}</span><span class="ln">на этой неделе</span>${last?`<span class="ln" style="margin-top:8px">Последняя:</span><span class="ln">${fdate(last.date)}, ${agoText(daysAgo(last.date))}</span>`:''}</div></div></div>
 `;
   const T=data.templates;
   h+='<h2>Мои тренировки</h2>';
