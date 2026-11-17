@@ -108,7 +108,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
 .rest .seg button[aria-pressed="true"]{background:rgba(255,255,255,.9);color:#15181D}
 .restpick{display:flex;align-items:center;gap:10px;margin:-6px 0 16px;font-size:15px;color:var(--muted)}
 .restpick .seg{background:var(--surface2);color:var(--ink)}
-.iostimer{background:var(--surface);border-radius:16px;padding:12px 14px;margin:-4px 0 16px}
+.iostimer{background:var(--surface);border-radius:16px;padding:12px 14px;margin:-4px 0 12px}
+.iostimer + .iostimer{margin-top:-4px}
+.iostimer + .iostimer + *{margin-top:16px}
 .iostimer label{display:flex;align-items:center;gap:12px;font-weight:600;cursor:pointer}
 .iostimer .sw{appearance:none;-webkit-appearance:none;width:51px;height:31px;border-radius:999px;background:var(--surface2);position:relative;flex:none;cursor:pointer;margin-left:auto;transition:background .15s}
 .iostimer .sw::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .15s}
@@ -361,7 +363,7 @@ async function load(){
   try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
   if(!data || !data.exercises) data=defaults();
   migrate();
-  if(data.active && data.restAt && Date.now()-data.restAt < 15*60e3) rest=data.restAt;
+  if(data.active && appTimer() && data.restAt && Date.now()-data.restAt < 15*60e3) rest=data.restAt;
   if(!Array.isArray(data.templates)) data.templates=[];
   render();
 }
@@ -421,11 +423,11 @@ function renderWorkout(){
   const a=data.active; let h='';
   if(a){
     h+=`<div class="top"><h1>${esc(a.name||'Тренировка')}</h1><div class="sub">Дата: <input type="date" class="dateinp" data-f="adate" value="${a.date}" aria-label="Дата тренировки"></div></div>
-      <div class="restpick">Отдых между подходами ${restSeg()}</div>
-      <div class="iostimer"><label for="ios-t">Запускать таймер iPhone<input type="checkbox" class="sw" id="ios-t" data-f="iostimer" ${data.iosTimer?'checked':''}></label>
-      <p>${data.iosTimer?`После ✓ запустится команда «Отдых ${restMin()}». Вернуться в приложение — стрелка ◀ в левом верхнем углу.`:'Таймер сработает, даже если экран заблокирован. Нужны команды «Отдых 4» и «Отдых 5» в приложении «Команды».'}</p></div>`;
+      <div class="restpick">Отдых ${restSeg()}</div>
+      <div class="iostimer"><label for="ios-t">Таймер iPhone<input type="checkbox" class="sw" id="ios-t" data-f="iostimer" ${data.iosTimer?'checked':''}></label></div>
+      <div class="iostimer"><label for="app-t">Таймер приложения<input type="checkbox" class="sw" id="app-t" data-f="apptimer" ${appTimer()?'checked':''}></label></div>`;
     if(!a.items.length) h+='<p class="empty">Добавь первое упражнение — вес подставится из прошлого раза.</p>';
-    else h+='<p class="sub" style="margin:-8px 0 14px">Серые цифры — повторения прошлого раза. Нажми ✓, и они подставятся, если не вводил свои.</p>';
+    else h+='<p class="sub" style="margin:4px 0 14px">Серые цифры — повторения прошлого раза. Нажми ✓, и они подставятся, если не вводил свои.</p>';
     a.items.forEach((it,ii)=>{ h+=itemCard(it,ii); });
     h+=`<button class="btn sec" data-act="openSheet">Добавить упражнение</button>
         <button class="btn gap" data-act="finish">Завершить и сохранить</button>
@@ -597,10 +599,11 @@ function renderRest(){
   const sec=Math.floor((Date.now()-rest)/1000), target=restMin()*60, left=target-sec;
   const ready=left<=0, v=Math.abs(left);
   const t=(ready&&v>0?'+':'')+Math.floor(v/60)+':'+pad(v%60);
-  el.innerHTML=`<div class="rest ${ready?'ready':''}" role="timer"><span class="tw"><span class="t num">${t}</span><span class="l">${ready?'Можно подход':'до подхода'}</span></span>${restSeg()}<button class="stop" data-act="stopRest">Стоп</button></div>`;
+  el.innerHTML=`<div class="rest ${ready?'ready':''}" role="timer"><span class="tw"><span class="t num">${t}</span><span class="l">${ready?'Можно подход':'до подхода'}</span></span>${restSeg(true)}<button class="stop" data-act="stopRest">Стоп</button></div>`;
 }
 function restMin(){ return data && data.restMin ? data.restMin : 4; }
-function restSeg(){ return `<span class="seg" role="group" aria-label="Время отдыха">${[4,5].map(m=>`<button data-act="restMin" data-m="${m}" aria-pressed="${restMin()===m}">${m} мин</button>`).join('')}</span>`; }
+function appTimer(){ return !data || data.appTimer!==false; }
+function restSeg(compact){ return `<span class="seg" role="group" aria-label="Время отдыха, минут">${[3,4,5].map(m=>`<button data-act="restMin" data-m="${m}" aria-pressed="${restMin()===m}" aria-label="${m} минут">${compact?m:m+' мин'}</button>`).join('')}</span>`; }
 setInterval(()=>{ if(rest) renderRest(); },1000);
 
 /* ---------- render ---------- */
@@ -640,7 +643,7 @@ document.addEventListener('click',e=>{
       const st=A.items[i].sets[s], row=b.closest('.set');
       if(!st.done){
         if(st.r===''||st.r==null){ const inp=row.querySelector('[data-f="r"]'); if(inp && inp.placeholder){ st.r=inp.placeholder; inp.value=st.r; } }
-        st.done=true; rest=Date.now(); data.restAt=rest;
+        st.done=true; if(appTimer()){ rest=Date.now(); data.restAt=rest; }
         if(data.iosTimer){ save(); setTimeout(()=>{ location.href='shortcuts://run-shortcut?name='+encodeURIComponent('Отдых '+restMin()); },150); }
       } else st.done=false;
       row.classList.toggle('done', st.done); save(); renderRest(); break;
@@ -697,6 +700,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('input',e=>{
   const t=e.target, f=t.dataset.f; if(!f || !data) return;
   if(f==='iostimer'){ data.iosTimer=t.checked; save(); render(); return; }
+  if(f==='apptimer'){ data.appTimer=t.checked; if(!t.checked){ rest=null; data.restAt=null; } save(); render(); return; }
   if(f==='tplname'){ if(tplDraft) tplDraft.name=t.value; return; }
   if(!data.active) return;
   if(f==='w'||f==='r'){ const st=data.active.items[+t.dataset.i].sets[+t.dataset.s]; st[f]=t.value; save(); }
